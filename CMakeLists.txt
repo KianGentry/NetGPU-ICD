@@ -13,3 +13,11 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 add_compile_options(-fno-exceptions -fno-rtti -Wall -Wextra -Wpedantic)
 
 enable_testing()
+
+# wire protocol shared by client and host
+add_library(netgpu_common STATIC common/src/wire.cpp)
+target_include_directories(netgpu_common PUBLIC common/include)
+
+add_executable(wire_test tests/wire_test.cpp)
+target_link_libraries(wire_test PRIVATE netgpu_common)
+add_test(NAME wire_test COMMAND wire_test)
