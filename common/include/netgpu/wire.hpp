@@ -30,11 +30,20 @@ struct WireHeader {
 
 using WireBytes = std::array<uint8_t, kWireHeaderSize>;
 
+enum class HeaderValidationResult {
+    valid,
+    badMagic,
+    unsupportedVersion,
+    invalidHeaderLength,
+    fragmentTooLarge
+};
+
 bool hasWireMagic(uint32_t magic);
 bool isSupportedWireVersion(uint16_t version);
 
 // big-endian on the wire
 WireBytes encodeHeader(const WireHeader& header);
 WireHeader decodeHeader(const WireBytes& bytes);
+HeaderValidationResult validateHeader(const WireHeader& header, uint32_t maxFragmentLength);
 
 } // namespace netgpu

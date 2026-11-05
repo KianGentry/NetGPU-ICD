@@ -76,4 +76,13 @@ WireHeader decodeHeader(const WireBytes& bytes) {
     return header;
 }
 
+HeaderValidationResult validateHeader(const WireHeader& header, uint32_t maxFragmentLength) {
+    if (!hasWireMagic(header.magic)) return HeaderValidationResult::badMagic;
+    if (!isSupportedWireVersion(header.version)) return HeaderValidationResult::unsupportedVersion;
+    if (header.headerLength != kWireHeaderSize) return HeaderValidationResult::invalidHeaderLength;
+    if (header.fragmentLength > maxFragmentLength) return HeaderValidationResult::fragmentTooLarge;
+
+    return HeaderValidationResult::valid;
+}
+
 } // namespace netgpu

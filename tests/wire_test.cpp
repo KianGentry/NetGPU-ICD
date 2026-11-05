@@ -15,6 +15,8 @@ constexpr uint32_t kSampleFragmentOffset = 0x090A0B0C;
 constexpr uint32_t kSampleTotalLength = 0x0D0E0F10;
 
 constexpr uint8_t kFirstMagicByte = 'N';
+constexpr uint32_t kMaxFragmentLength = 1500;
+constexpr uint32_t kOversizedFragmentLength = kMaxFragmentLength + 1;
 
 netgpu::WireHeader makeSampleHeader() {
     netgpu::WireHeader header;
@@ -61,11 +63,51 @@ bool headerSurvivesRoundTrip() {
         && decoded.totalLength == original.totalLength;
 }
 
+bool headerValidationAcceptsValidHeader() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.fragmentLength = kMaxFragmentLength;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::valid;
+}
+
+bool headerValidationRejectsBadMagic() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.magic = kWrongMagic;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::badMagic;
+}
+
+bool headerValidationRejectsUnsupportedVersion() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.version = kWrongVersion;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::unsupportedVersion;
+}
+
+bool headerValidationRejectsInvalidLength() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.headerLength = 0;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::invalidHeaderLength;
+}
+
+bool headerValidationRejectsOversizedFragment() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.fragmentLength = kOversizedFragmentLength;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::fragmentTooLarge;
+}
+
 // exit code 0 means every check passed
 int main() {
     if (!magicAndVersionAreChecked()) return 1;
     if (!encodedHeaderStartsWithMagicBytes()) return 1;
     if (!headerSurvivesRoundTrip()) return 1;
+    if (!headerValidationAcceptsValidHeader()) return 1;
+    if (!headerValidationRejectsBadMagic()) return 1;
+    if (!headerValidationRejectsUnsupportedVersion()) return 1;
+    if (!headerValidationRejectsInvalidLength()) return 1;
+    if (!headerValidationRejectsOversizedFragment()) return 1;
 
     return 0;
 }
