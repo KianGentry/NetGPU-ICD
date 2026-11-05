@@ -17,6 +17,8 @@ constexpr uint32_t kSampleTotalLength = 0x0D0E0F10;
 constexpr uint8_t kFirstMagicByte = 'N';
 constexpr uint32_t kMaxFragmentLength = 1500;
 constexpr uint32_t kOversizedFragmentLength = kMaxFragmentLength + 1;
+constexpr uint32_t kOneByte = 1;
+constexpr uint32_t kLargestUint32 = 0xFFFFFFFF;
 
 netgpu::WireHeader makeSampleHeader() {
     netgpu::WireHeader header;
@@ -65,7 +67,9 @@ bool headerSurvivesRoundTrip() {
 
 bool headerValidationAcceptsValidHeader() {
     netgpu::WireHeader header = makeSampleHeader();
+    header.fragmentOffset = 0;
     header.fragmentLength = kMaxFragmentLength;
+    header.totalLength = kMaxFragmentLength;
 
     return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::valid;
 }
@@ -98,6 +102,33 @@ bool headerValidationRejectsOversizedFragment() {
     return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::fragmentTooLarge;
 }
 
+bool headerValidationRejectsFragmentPastMessageEnd() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.fragmentOffset = 0;
+    header.fragmentLength = kOneByte;
+    header.totalLength = 0;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::fragmentOutOfBounds;
+}
+
+bool headerValidationRejectsOffsetPastMessageEnd() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.fragmentOffset = kOneByte;
+    header.fragmentLength = 0;
+    header.totalLength = 0;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::fragmentOutOfBounds;
+}
+
+bool headerValidationRejectsWrappingFragmentRange() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.fragmentOffset = kLargestUint32;
+    header.fragmentLength = kOneByte;
+    header.totalLength = kOneByte;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::fragmentOutOfBounds;
+}
+
 // exit code 0 means every check passed
 int main() {
     if (!magicAndVersionAreChecked()) return 1;
@@ -108,6 +139,9 @@ int main() {
     if (!headerValidationRejectsUnsupportedVersion()) return 1;
     if (!headerValidationRejectsInvalidLength()) return 1;
     if (!headerValidationRejectsOversizedFragment()) return 1;
+    if (!headerValidationRejectsFragmentPastMessageEnd()) return 1;
+    if (!headerValidationRejectsOffsetPastMessageEnd()) return 1;
+    if (!headerValidationRejectsWrappingFragmentRange()) return 1;
 
     return 0;
 }

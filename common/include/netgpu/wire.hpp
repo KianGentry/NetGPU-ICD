@@ -35,7 +35,8 @@ enum class HeaderValidationResult {
     badMagic,
     unsupportedVersion,
     invalidHeaderLength,
-    fragmentTooLarge
+    fragmentTooLarge,
+    fragmentOutOfBounds
 };
 
 bool hasWireMagic(uint32_t magic);

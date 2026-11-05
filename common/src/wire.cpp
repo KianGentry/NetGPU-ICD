@@ -81,6 +81,10 @@ HeaderValidationResult validateHeader(const WireHeader& header, uint32_t maxFrag
     if (!isSupportedWireVersion(header.version)) return HeaderValidationResult::unsupportedVersion;
     if (header.headerLength != kWireHeaderSize) return HeaderValidationResult::invalidHeaderLength;
     if (header.fragmentLength > maxFragmentLength) return HeaderValidationResult::fragmentTooLarge;
+    if (header.fragmentOffset > header.totalLength) return HeaderValidationResult::fragmentOutOfBounds;
+    if (header.fragmentLength > header.totalLength - header.fragmentOffset) {
+        return HeaderValidationResult::fragmentOutOfBounds;
+    }
 
     return HeaderValidationResult::valid;
 }
