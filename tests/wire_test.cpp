@@ -19,6 +19,7 @@ constexpr uint32_t kMaxFragmentLength = 1500;
 constexpr uint32_t kOversizedFragmentLength = kMaxFragmentLength + 1;
 constexpr uint32_t kOneByte = 1;
 constexpr uint32_t kLargestUint32 = 0xFFFFFFFF;
+constexpr uint32_t kMessageLargerThanLimit = netgpu::kMaxMessageSize + 1;
 
 netgpu::WireHeader makeSampleHeader() {
     netgpu::WireHeader header;
@@ -102,6 +103,24 @@ bool headerValidationRejectsOversizedFragment() {
     return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::fragmentTooLarge;
 }
 
+bool headerValidationRejectsOversizedMessage() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.fragmentOffset = 0;
+    header.fragmentLength = kMessageLargerThanLimit;
+    header.totalLength = kMessageLargerThanLimit;
+
+    return netgpu::validateHeader(header, kLargestUint32) == netgpu::HeaderValidationResult::messageTooLarge;
+}
+
+bool headerValidationAcceptsMaximumMessage() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.fragmentOffset = 0;
+    header.fragmentLength = netgpu::kMaxMessageSize;
+    header.totalLength = netgpu::kMaxMessageSize;
+
+    return netgpu::validateHeader(header, kLargestUint32) == netgpu::HeaderValidationResult::valid;
+}
+
 bool headerValidationRejectsFragmentPastMessageEnd() {
     netgpu::WireHeader header = makeSampleHeader();
     header.fragmentOffset = 0;
@@ -139,6 +158,8 @@ int main() {
     if (!headerValidationRejectsUnsupportedVersion()) return 1;
     if (!headerValidationRejectsInvalidLength()) return 1;
     if (!headerValidationRejectsOversizedFragment()) return 1;
+    if (!headerValidationRejectsOversizedMessage()) return 1;
+    if (!headerValidationAcceptsMaximumMessage()) return 1;
     if (!headerValidationRejectsFragmentPastMessageEnd()) return 1;
     if (!headerValidationRejectsOffsetPastMessageEnd()) return 1;
     if (!headerValidationRejectsWrappingFragmentRange()) return 1;

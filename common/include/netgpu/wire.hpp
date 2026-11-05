@@ -11,6 +11,7 @@ constexpr uint16_t kWireVersion = 1;
 
 // sum of every field in WireHeader
 constexpr uint16_t kWireHeaderSize = 56;
+constexpr uint32_t kMaxMessageSize = 64u * 1024u * 1024u;
 
 // native layout, never copied to the wire directly
 struct WireHeader {
@@ -36,6 +37,7 @@ enum class HeaderValidationResult {
     unsupportedVersion,
     invalidHeaderLength,
     fragmentTooLarge,
+    messageTooLarge,
     fragmentOutOfBounds
 };
 
