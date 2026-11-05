@@ -35,3 +35,11 @@ target_link_libraries(transport_test PRIVATE netgpu_transport_unix)
 add_test(NAME transport_test COMMAND transport_test)
 set(NETGPU_TRANSPORT_TEST_TIMEOUT_SECONDS 20)
 set_tests_properties(transport_test PROPERTIES TIMEOUT ${NETGPU_TRANSPORT_TEST_TIMEOUT_SECONDS})
+
+add_library(netgpu_ethernet_frame STATIC transport/ethernet_frame.cpp
+    transport/include/netgpu/ethernet_frame.hpp)
+target_include_directories(netgpu_ethernet_frame PUBLIC transport/include)
+
+add_executable(ethernet_frame_test tests/ethernet_frame_test.cpp)
+target_link_libraries(ethernet_frame_test PRIVATE netgpu_ethernet_frame)
+add_test(NAME ethernet_frame_test COMMAND ethernet_frame_test)
