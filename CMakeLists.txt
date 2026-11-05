@@ -33,3 +33,5 @@ target_link_libraries(netgpu_transport_unix PUBLIC netgpu_common Threads::Thread
 add_executable(transport_test tests/transport_test.cpp)
 target_link_libraries(transport_test PRIVATE netgpu_transport_unix)
 add_test(NAME transport_test COMMAND transport_test)
+set(NETGPU_TRANSPORT_TEST_TIMEOUT_SECONDS 20)
+set_tests_properties(transport_test PROPERTIES TIMEOUT ${NETGPU_TRANSPORT_TEST_TIMEOUT_SECONDS})

@@ -1,6 +1,8 @@
 #include "netgpu/unix_domain_socket.hpp"
 
 #include <array>
+#include <cstdlib>
+#include <string>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
@@ -14,6 +16,12 @@ constexpr size_t kPartialHeaderSize = 12;
 constexpr size_t kSmallPayloadSize = 4;
 constexpr size_t kPartialPayloadSize = 2;
 constexpr uint32_t kSmallMaxFragmentLength = 16;
+constexpr size_t kConcurrentMessageCount = 64;
+constexpr size_t kConcurrentSenderCount = 4;
+constexpr size_t kConcurrentPayloadSize = 32;
+constexpr uint16_t kRequestMessageType = 2;
+constexpr uint16_t kResponseMessageType = 3;
+constexpr int kListenBacklog = 1;
 
 bool setSocketBufferSize(int socketFd, int option, int size) {
     return setsockopt(socketFd, SOL_SOCKET, option, &size, sizeof(size)) == 0;
@@ -117,12 +125,145 @@ bool sendFailsWhenPeerCloses() {
     return !sender.sendMessage(header, payload);
 }
 
+std::vector<uint8_t> makeConcurrentPayload(uint64_t requestId) {
+    std::vector<uint8_t> payload(kConcurrentPayloadSize);
+    for (size_t i = 0; i < payload.size(); ++i) {
+        payload[i] = static_cast<uint8_t>(requestId + i);
+    }
+    return payload;
+}
+
+netgpu::WireHeader makeConcurrentHeader(uint16_t messageType, uint64_t requestId) {
+    netgpu::WireHeader header;
+    header.messageType = messageType;
+    header.requestId = requestId;
+    header.fragmentLength = static_cast<uint32_t>(kConcurrentPayloadSize);
+    header.totalLength = header.fragmentLength;
+    return header;
+}
+
+bool isValidConcurrentRequest(const netgpu::TransportMessage& message) {
+    const uint64_t requestId = message.header.requestId;
+    if (message.header.messageType != kRequestMessageType) return false;
+    if (requestId == 0 || requestId > kConcurrentMessageCount) return false;
+    if (message.header.fragmentLength != kConcurrentPayloadSize) return false;
+    return message.payload == makeConcurrentPayload(requestId);
+}
+
+bool runHostSession(netgpu::UnixDomainSocket& listener) {
+    netgpu::UnixDomainSocket host(kMaxFragmentLength);
+    if (!listener.acceptClient(host)) return false;
+
+    std::array<bool, kConcurrentMessageCount> seenRequests{};
+    for (size_t i = 0; i < kConcurrentMessageCount; ++i) {
+        netgpu::TransportMessage request;
+        if (!host.receiveMessage(request) || !isValidConcurrentRequest(request)) return false;
+
+        const size_t requestIndex = static_cast<size_t>(request.header.requestId - 1);
+        if (seenRequests[requestIndex]) return false;
+        seenRequests[requestIndex] = true;
+
+        const netgpu::WireHeader responseHeader = makeConcurrentHeader(
+            kResponseMessageType, request.header.requestId);
+        if (!host.sendMessage(responseHeader, request.payload)) return false;
+    }
+
+    return true;
+}
+
+bool sendConcurrentRequests(netgpu::UnixDomainSocket& client, size_t senderIndex) {
+    for (size_t requestIndex = senderIndex;
+         requestIndex < kConcurrentMessageCount;
+         requestIndex += kConcurrentSenderCount) {
+        const uint64_t requestId = requestIndex + 1;
+        const netgpu::WireHeader header = makeConcurrentHeader(kRequestMessageType, requestId);
+        if (!client.sendMessage(header, makeConcurrentPayload(requestId))) return false;
+    }
+    return true;
+}
+
+bool receiveConcurrentResponses(netgpu::UnixDomainSocket& client) {
+    std::array<bool, kConcurrentMessageCount> seenResponses{};
+    for (size_t i = 0; i < kConcurrentMessageCount; ++i) {
+        netgpu::TransportMessage response;
+        if (!client.receiveMessage(response)) return false;
+        const uint64_t requestId = response.header.requestId;
+        if (response.header.messageType != kResponseMessageType) return false;
+        if (requestId == 0 || requestId > kConcurrentMessageCount) return false;
+        if (response.payload != makeConcurrentPayload(requestId)) return false;
+
+        const size_t responseIndex = static_cast<size_t>(requestId - 1);
+        if (seenResponses[responseIndex]) return false;
+        seenResponses[responseIndex] = true;
+    }
+    return true;
+}
+
+bool runConcurrentClient(netgpu::UnixDomainSocket& client) {
+    std::array<bool, kConcurrentSenderCount> sendResults{};
+    bool responsesReceived = false;
+    std::thread responseThread([&] {
+        responsesReceived = receiveConcurrentResponses(client);
+    });
+
+    std::array<std::thread, kConcurrentSenderCount> senderThreads;
+    for (size_t i = 0; i < senderThreads.size(); ++i) {
+        senderThreads[i] = std::thread([&, i] {
+            sendResults[i] = sendConcurrentRequests(client, i);
+        });
+    }
+
+    for (std::thread& senderThread : senderThreads) senderThread.join();
+    responseThread.join();
+
+    if (!responsesReceived) return false;
+    for (bool sendSucceeded : sendResults) {
+        if (!sendSucceeded) return false;
+    }
+    return true;
+}
+
+bool createTemporarySocketDirectory(std::string& directory) {
+    char directoryTemplate[] = "/tmp/netgpu-transport-XXXXXX";
+    char* createdDirectory = mkdtemp(directoryTemplate);
+    if (createdDirectory == nullptr) return false;
+    directory = createdDirectory;
+    return true;
+}
+
+bool endToEndConcurrentMessagesSurvive() {
+    std::string directory;
+    if (!createTemporarySocketDirectory(directory)) return false;
+
+    const std::string socketPath = directory + "/host.sock";
+    bool testPassed = false;
+    {
+        netgpu::UnixDomainSocket listener(kMaxFragmentLength);
+        if (listener.listenAt(socketPath, kListenBacklog)) {
+            netgpu::UnixDomainSocket client(kMaxFragmentLength);
+            if (client.connectTo(socketPath)) {
+                bool hostSessionPassed = false;
+                std::thread hostThread([&] {
+                    hostSessionPassed = runHostSession(listener);
+                });
+
+                const bool clientSessionPassed = runConcurrentClient(client);
+                hostThread.join();
+                testPassed = clientSessionPassed && hostSessionPassed;
+            }
+        }
+    }
+    rmdir(directory.c_str());
+    return testPassed;
+}
+
 // exit code zero means every check passed
 int main() {
     if (!largeMessageSurvivesStreamTransport()) return 1;
     if (!receiveFailsOnPartialHeader()) return 1;
     if (!receiveFailsOnPartialPayload()) return 1;
     if (!sendFailsWhenPeerCloses()) return 1;
+    if (!endToEndConcurrentMessagesSurvive()) return 1;
 
     return 0;
 }
