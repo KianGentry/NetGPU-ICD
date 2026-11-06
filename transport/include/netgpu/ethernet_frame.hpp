@@ -22,9 +22,9 @@ struct EthernetFrameView {
 };
 
 bool encodeEthernetFrame(const MacAddress& destination, const MacAddress& source,
-                         const std::vector<uint8_t>& payload, size_t maxPayloadLength,
-                         std::vector<uint8_t>& frame);
-bool decodeEthernetFrame(const uint8_t* frame, size_t frameLength, size_t maxPayloadLength,
-                         EthernetFrameView& view);
+    const std::vector<uint8_t>& payload, size_t maxPayloadLength, std::vector<uint8_t>& frame);
+
+bool decodeEthernetFrame(const uint8_t* frame, size_t frameLength, 
+    size_t maxPayloadLength, EthernetFrameView& view);
 
 } // namespace netgpu

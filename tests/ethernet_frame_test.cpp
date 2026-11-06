@@ -23,8 +23,7 @@ bool frameRoundTrips() {
 bool oversizedPayloadIsRejected() {
     const std::vector<uint8_t> payload(netgpu::kMaxEthernetPayloadSize + 1);
     std::vector<uint8_t> frame;
-    return !netgpu::encodeEthernetFrame(kDestination, kSource, payload,
-                                        netgpu::kMaxEthernetPayloadSize, frame);
+    return !netgpu::encodeEthernetFrame(kDestination, kSource, payload, netgpu::kMaxEthernetPayloadSize, frame);
 }
 
 bool wrongEtherTypeIsRejected() {

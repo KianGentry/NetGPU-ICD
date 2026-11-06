@@ -16,8 +16,8 @@ bool payloadLengthIsAllowed(size_t payloadLength, size_t maxPayloadLength) {
 } // namespace
 
 bool encodeEthernetFrame(const MacAddress& destination, const MacAddress& source,
-                         const std::vector<uint8_t>& payload, size_t maxPayloadLength,
-                         std::vector<uint8_t>& frame) {
+    const std::vector<uint8_t>& payload, size_t maxPayloadLength, std::vector<uint8_t>& frame) {
+
     frame.clear();
     if (!payloadLengthIsAllowed(payload.size(), maxPayloadLength)) return false;
 
@@ -31,12 +31,12 @@ bool encodeEthernetFrame(const MacAddress& destination, const MacAddress& source
 }
 
 bool decodeEthernetFrame(const uint8_t* frame, size_t frameLength, size_t maxPayloadLength,
-                         EthernetFrameView& view) {
+    EthernetFrameView& view) {
+    
     view = {};
     if (frameLength < kEthernetHeaderSize) return false;
 
-    const uint16_t etherType = static_cast<uint16_t>(frame[kEtherTypeOffset] << 8)
-        | frame[kEtherTypeOffset + 1];
+    const uint16_t etherType = static_cast<uint16_t>(frame[kEtherTypeOffset] << 8) | frame[kEtherTypeOffset + 1];
     if (etherType != kNetGpuEtherType) return false;
 
     const size_t payloadLength = frameLength - kEthernetHeaderSize;

@@ -59,8 +59,7 @@ bool PacketSocket::sendFrame(const std::vector<uint8_t>& frame) {
     address.sll_halen = static_cast<unsigned char>(kEthernetAddressSize);
     std::copy(view.destination.begin(), view.destination.end(), address.sll_addr);
 
-    const ssize_t sentBytes = sendto(socketFd_, frame.data(), frame.size(), 0,
-                                     reinterpret_cast<const sockaddr*>(&address), sizeof(address));
+    const ssize_t sentBytes = sendto(socketFd_, frame.data(), frame.size(), 0, reinterpret_cast<const sockaddr*>(&address), sizeof(address));
     return sentBytes == static_cast<ssize_t>(frame.size());
 }
 
@@ -87,8 +86,7 @@ bool PacketSocket::receiveFrame(std::vector<uint8_t>& frame, int timeoutMillisec
     if (static_cast<size_t>(packetSize) > packetBuffer.size()) return false;
 
     EthernetFrameView view;
-    if (!decodeEthernetFrame(packetBuffer.data(), static_cast<size_t>(packetSize),
-                             kMaxEthernetPayloadSize, view)) return false;
+    if (!decodeEthernetFrame(packetBuffer.data(), static_cast<size_t>(packetSize), kMaxEthernetPayloadSize, view)) return false;
 
     frame.assign(packetBuffer.begin(), packetBuffer.begin() + packetSize);
     return true;

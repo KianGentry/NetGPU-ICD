@@ -172,9 +172,7 @@ bool runHostSession(netgpu::UnixDomainSocket& listener) {
 }
 
 bool sendConcurrentRequests(netgpu::UnixDomainSocket& client, size_t senderIndex) {
-    for (size_t requestIndex = senderIndex;
-         requestIndex < kConcurrentMessageCount;
-         requestIndex += kConcurrentSenderCount) {
+    for (size_t requestIndex = senderIndex; requestIndex < kConcurrentMessageCount; requestIndex += kConcurrentSenderCount) {
         const uint64_t requestId = requestIndex + 1;
         const netgpu::WireHeader header = makeConcurrentHeader(kRequestMessageType, requestId);
         if (!client.sendMessage(header, makeConcurrentPayload(requestId))) return false;

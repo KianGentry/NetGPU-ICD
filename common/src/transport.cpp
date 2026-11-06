@@ -4,8 +4,7 @@
 
 namespace netgpu {
 
-ITransport::ITransport(uint32_t maxFragmentLength)
-    : maxFragmentLength_(maxFragmentLength) {}
+ITransport::ITransport(uint32_t maxFragmentLength) : maxFragmentLength_(maxFragmentLength) {}
 
 bool ITransport::sendMessage(const WireHeader& header, const std::vector<uint8_t>& payload) {
     if (payload.size() != header.fragmentLength) return false;
