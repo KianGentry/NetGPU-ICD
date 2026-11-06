@@ -1,12 +1,14 @@
 #include "netgpu/packet_socket.hpp"
 
 #include <arpa/inet.h>
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cstring>
 #include <linux/if_packet.h>
 #include <net/if.h>
 #include <poll.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -63,13 +65,27 @@ bool PacketSocket::openOnInterface(const std::string& interfaceName) {
         return false;
     }
 
+    ifreq interfaceRequest{};
+    std::strncpy(interfaceRequest.ifr_name, interfaceName.c_str(), sizeof(interfaceRequest.ifr_name) - 1);
+    if (ioctl(socketFd, SIOCGIFHWADDR, &interfaceRequest) < 0) {
+        setSystemError(lastError_, "ioctl(SIOCGIFHWADDR)");
+        close(socketFd);
+        return false;
+    }
+
     socketFd_ = socketFd;
     interfaceIndex_ = address.sll_ifindex;
+    std::copy_n(reinterpret_cast<const uint8_t*>(interfaceRequest.ifr_hwaddr.sa_data),
+        kEthernetAddressSize, localAddress_.begin());
     return true;
 }
 
 const std::string& PacketSocket::lastError() const {
     return lastError_;
+}
+
+const MacAddress& PacketSocket::localAddress() const {
+    return localAddress_;
 }
 
 bool PacketSocket::sendFrame(const std::vector<uint8_t>& frame) {

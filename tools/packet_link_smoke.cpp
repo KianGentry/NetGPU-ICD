@@ -86,7 +86,7 @@ bool sendSmokeMessage(netgpu::PacketSocket& socket, const netgpu::MacAddress& de
     return socket.sendFrame(frame);
 }
 
-int runListener(const std::string& interfaceName, const netgpu::MacAddress& localAddress) {
+int runListener(const std::string& interfaceName) {
     netgpu::PacketSocket socket;
     if (!socket.openOnInterface(interfaceName)) {
         std::cerr << "could not open AF_PACKET socket on " << interfaceName
@@ -94,6 +94,7 @@ int runListener(const std::string& interfaceName, const netgpu::MacAddress& loca
         return 1;
     }
 
+    const netgpu::MacAddress& localAddress = socket.localAddress();
     netgpu::MacAddress peerAddress{};
     if (!receiveSmokeMessage(socket, localAddress, nullptr, kPingType, peerAddress)) {
         std::cerr << "timed out waiting for ping\n";
@@ -107,14 +108,14 @@ int runListener(const std::string& interfaceName, const netgpu::MacAddress& loca
     return 0;
 }
 
-int runSender(const std::string& interfaceName, const netgpu::MacAddress& localAddress,
-    const netgpu::MacAddress& peerAddress) {
+int runSender(const std::string& interfaceName, const netgpu::MacAddress& peerAddress) {
 
     netgpu::PacketSocket socket;
     if (!socket.openOnInterface(interfaceName)) {
         std::cerr << "could not open AF_PACKET socket on " << interfaceName << ": " << socket.lastError() << '\n';
         return 1;
     }
+    const netgpu::MacAddress& localAddress = socket.localAddress();
     if (!sendSmokeMessage(socket, peerAddress, localAddress, kPingType)) {
         std::cerr << "could not send ping\n";
         return 1;
@@ -129,33 +130,28 @@ int runSender(const std::string& interfaceName, const netgpu::MacAddress& localA
 }
 
 void printUsage(const char* programName) {
-    std::cerr << "usage:\n" << programName << " listen <interface> <local-mac>\n" << programName << " send <interface> <local-mac> <peer-mac>\n";
+    std::cerr << "usage:\n" << programName << " listen <interface>\n"
+              << programName << " send <interface> <peer-mac>\n";
 }
 
 } // namespace
 
 int main(int argumentCount, char** arguments) {
-    if (argumentCount != 4 && argumentCount != 5) {
-        printUsage(arguments[0]);
-        return 1;
-    }
-
-    netgpu::MacAddress localAddress{};
-    if (!parseMacAddress(arguments[3], localAddress)) {
+    if (argumentCount != 3 && argumentCount != 4) {
         printUsage(arguments[0]);
         return 1;
     }
 
     const std::string mode = arguments[1];
     const std::string interfaceName = arguments[2];
-    if (mode == "listen" && argumentCount == 4) return runListener(interfaceName, localAddress);
-    if (mode == "send" && argumentCount == 5) {
+    if (mode == "listen" && argumentCount == 3) return runListener(interfaceName);
+    if (mode == "send" && argumentCount == 4) {
         netgpu::MacAddress peerAddress{};
-        if (!parseMacAddress(arguments[4], peerAddress)) {
+        if (!parseMacAddress(arguments[3], peerAddress)) {
             printUsage(arguments[0]);
             return 1;
         }
-        return runSender(interfaceName, localAddress, peerAddress);
+        return runSender(interfaceName, peerAddress);
     }
 
     printUsage(arguments[0]);

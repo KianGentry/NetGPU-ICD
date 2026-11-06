@@ -18,11 +18,13 @@ public:
     bool openOnInterface(const std::string& interfaceName);
     bool sendFrame(const std::vector<uint8_t>& frame);
     bool receiveFrame(std::vector<uint8_t>& frame, int timeoutMilliseconds);
+    const MacAddress& localAddress() const;
     const std::string& lastError() const;
 
 private:
     int socketFd_ = -1;
     int interfaceIndex_ = 0;
+    MacAddress localAddress_{};
     std::string lastError_;
 };
 

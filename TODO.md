@@ -12,6 +12,19 @@
 - [x] Add a statically linked `packet_link_smoke` utility.
 - [x] Exercise AF_PACKET send/receive in both directions over a private veth pair.
 
+## Current Focus
+
+The next checkpoint is the physical two-machine link test. The smoke utility currently sends a private `NGPU` ping/pong payload, so a pass proves AF_PACKET can use the selected NIC and EtherType across the LAN; it does not yet prove the NetGPU wire protocol or daemon.
+
+- [ ] Build `packet_link_smoke`, start the listener on the host, then send from the Packard Bell client. Both sides should report that ping/pong completed.
+	- Host: `sudo ./build/packet_link_smoke listen enp5s0`
+	- Client: `sudo ./build/packet_link_smoke send enp3s0 d8:5e:d3:fa:fd:fb`
+	- If it fails, check interface names, raw-socket permission (`CAP_NET_RAW`), link state, peer MACs, and whether the path is VLAN-tagged. VLAN handling is not implemented yet.
+- [ ] After the physical ping/pong passes, replace the private payload with the common wire header and message types. The Ethernet codec owns the outer frame; `common` owns the transport-independent header and validation. This is the boundary the daemon will later consume.
+- [ ] Then implement discovery/handshake and the Vulkan-free `netgpu-hostd` dispatcher. It should validate frames before dispatch, answer supported discovery messages, and explicitly reject unsupported ones; the shader-module and command-buffer handlers remain stubs.
+- [ ] Before adding host GPU execution, verify the GT 710 and native Vulkan driver, then build the host Vulkan context and minimal executor. Keep hostd pinned to that native driver so it cannot recursively load the NetGPU ICD.
+- [ ] Once the host path is understood, add the client ICD manifest and loader-entrypoint skeleton. Test it in isolation with `VK_DRIVER_FILES`; it should safely enumerate zero remote devices until discovery exists.
+
 ## Ethernet And Wire Integration
 
 - [ ] Add a `MessageType` enum for discovery, handshake, capabilities, requests, responses and errors.
