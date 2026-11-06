@@ -87,21 +87,23 @@ bool sendSmokeMessage(netgpu::PacketSocket& socket, const netgpu::MacAddress& de
 }
 
 int runListener(const std::string& interfaceName) {
+    std::cerr << "opening AF_PACKET on " << interfaceName << '\n';
     netgpu::PacketSocket socket;
     if (!socket.openOnInterface(interfaceName)) {
-        std::cerr << "could not open AF_PACKET socket on " << interfaceName
-                  << ": " << socket.lastError() << '\n';
+        std::cerr << "could not open AF_PACKET socket on " << interfaceName << ": " << socket.lastError() << '\n';
         return 1;
     }
 
+    std::cerr << "listening on " << interfaceName << " for ping\n";
     const netgpu::MacAddress& localAddress = socket.localAddress();
     netgpu::MacAddress peerAddress{};
     if (!receiveSmokeMessage(socket, localAddress, nullptr, kPingType, peerAddress)) {
         std::cerr << "timed out waiting for ping\n";
         return 1;
     }
+    std::cerr << "ping received; sending pong\n";
     if (!sendSmokeMessage(socket, peerAddress, localAddress, kPongType)) {
-        std::cerr << "could not send pong\n";
+        std::cerr << "could not send pong: " << socket.lastError() << '\n';
         return 1;
     }
     std::cout << "received ping and sent pong\n";
@@ -110,16 +112,19 @@ int runListener(const std::string& interfaceName) {
 
 int runSender(const std::string& interfaceName, const netgpu::MacAddress& peerAddress) {
 
+    std::cerr << "opening AF_PACKET on " << interfaceName << '\n';
     netgpu::PacketSocket socket;
     if (!socket.openOnInterface(interfaceName)) {
         std::cerr << "could not open AF_PACKET socket on " << interfaceName << ": " << socket.lastError() << '\n';
         return 1;
     }
+    std::cerr << "socket ready on " << interfaceName << "; sending ping\n";
     const netgpu::MacAddress& localAddress = socket.localAddress();
     if (!sendSmokeMessage(socket, peerAddress, localAddress, kPingType)) {
-        std::cerr << "could not send ping\n";
+        std::cerr << "could not send ping: " << socket.lastError() << '\n';
         return 1;
     }
+    std::cerr << "ping sent; waiting for pong\n";
     netgpu::MacAddress responseAddress{};
     if (!receiveSmokeMessage(socket, localAddress, &peerAddress, kPongType, responseAddress)) {
         std::cerr << "timed out waiting for pong\n";
@@ -130,8 +135,7 @@ int runSender(const std::string& interfaceName, const netgpu::MacAddress& peerAd
 }
 
 void printUsage(const char* programName) {
-    std::cerr << "usage:\n" << programName << " listen <interface>\n"
-              << programName << " send <interface> <peer-mac>\n";
+    std::cerr << "usage:\n" << programName << " listen <interface>\n" << programName << " send <interface> <peer-mac>\n";
 }
 
 } // namespace

@@ -102,7 +102,15 @@ bool PacketSocket::sendFrame(const std::vector<uint8_t>& frame) {
     std::copy(view.destination.begin(), view.destination.end(), address.sll_addr);
 
     const ssize_t sentBytes = sendto(socketFd_, frame.data(), frame.size(), 0, reinterpret_cast<const sockaddr*>(&address), sizeof(address));
-    return sentBytes == static_cast<ssize_t>(frame.size());
+    if (sentBytes < 0) {
+        setSystemError(lastError_, "sendto(AF_PACKET)");
+        return false;
+    }
+    if (sentBytes != static_cast<ssize_t>(frame.size())) {
+        lastError_ = "sendto(AF_PACKET) sent a partial frame";
+        return false;
+    }
+    return true;
 }
 
 bool PacketSocket::receiveFrame(std::vector<uint8_t>& frame, int timeoutMilliseconds) {
