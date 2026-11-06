@@ -55,3 +55,4 @@ add_test(NAME packet_socket_test COMMAND packet_socket_test)
 
 add_executable(packet_link_smoke tools/packet_link_smoke.cpp)
 target_link_libraries(packet_link_smoke PRIVATE netgpu_transport_packet)
+target_link_options(packet_link_smoke PRIVATE -static)
