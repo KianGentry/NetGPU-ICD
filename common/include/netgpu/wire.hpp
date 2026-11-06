@@ -13,6 +13,18 @@ constexpr uint16_t kWireVersion = 1;
 constexpr uint16_t kWireHeaderSize = 56;
 constexpr uint32_t kMaxMessageSize = 64u * 1024u * 1024u;
 
+enum class MessageType : uint16_t {
+    discoveryRequest = 1,
+    discoveryResponse = 2,
+    handshakeRequest = 3,
+    handshakeResponse = 4,
+    capabilitiesRequest = 5,
+    capabilitiesResponse = 6,
+    request = 7,
+    response = 8,
+    error = 9
+};
+
 // native layout, never copied to the wire directly
 struct WireHeader {
     uint32_t magic = kWireMagic;
