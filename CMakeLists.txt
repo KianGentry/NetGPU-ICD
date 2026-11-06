@@ -43,3 +43,12 @@ target_include_directories(netgpu_ethernet_frame PUBLIC transport/include)
 add_executable(ethernet_frame_test tests/ethernet_frame_test.cpp)
 target_link_libraries(ethernet_frame_test PRIVATE netgpu_ethernet_frame)
 add_test(NAME ethernet_frame_test COMMAND ethernet_frame_test)
+
+add_library(netgpu_transport_packet STATIC transport/packet_socket.cpp
+    transport/include/netgpu/packet_socket.hpp)
+target_include_directories(netgpu_transport_packet PUBLIC transport/include)
+target_link_libraries(netgpu_transport_packet PUBLIC netgpu_ethernet_frame)
+
+add_executable(packet_socket_test tests/packet_socket_test.cpp)
+target_link_libraries(packet_socket_test PRIVATE netgpu_transport_packet)
+add_test(NAME packet_socket_test COMMAND packet_socket_test)
