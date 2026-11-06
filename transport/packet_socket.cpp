@@ -17,6 +17,12 @@ namespace {
 
 constexpr size_t kPacketBufferSize = kEthernetHeaderSize + kMaxEthernetPayloadSize;
 
+void setSystemError(std::string& errorMessage, const char* operation) {
+    errorMessage = operation;
+    errorMessage += ": ";
+    errorMessage += std::strerror(errno);
+}
+
 } // namespace
 
 PacketSocket::~PacketSocket() {
@@ -24,19 +30,35 @@ PacketSocket::~PacketSocket() {
 }
 
 bool PacketSocket::openOnInterface(const std::string& interfaceName) {
-    if (socketFd_ >= 0 || interfaceName.empty()) return false;
+    lastError_.clear();
+    if (socketFd_ >= 0) {
+        lastError_ = "socket is already open";
+        return false;
+    }
+    if (interfaceName.empty()) {
+        lastError_ = "interface name is empty";
+        return false;
+    }
 
     const unsigned int interfaceIndex = if_nametoindex(interfaceName.c_str());
-    if (interfaceIndex == 0) return false;
+    if (interfaceIndex == 0) {
+        lastError_ = "interface not found: ";
+        lastError_ += interfaceName;
+        return false;
+    }
 
     const int socketFd = socket(AF_PACKET, SOCK_RAW | SOCK_CLOEXEC, htons(kNetGpuEtherType));
-    if (socketFd < 0) return false;
+    if (socketFd < 0) {
+        setSystemError(lastError_, "socket(AF_PACKET)");
+        return false;
+    }
 
     sockaddr_ll address{};
     address.sll_family = AF_PACKET;
     address.sll_protocol = htons(kNetGpuEtherType);
     address.sll_ifindex = static_cast<int>(interfaceIndex);
     if (bind(socketFd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) < 0) {
+        setSystemError(lastError_, "bind(AF_PACKET)");
         close(socketFd);
         return false;
     }
@@ -44,6 +66,10 @@ bool PacketSocket::openOnInterface(const std::string& interfaceName) {
     socketFd_ = socketFd;
     interfaceIndex_ = address.sll_ifindex;
     return true;
+}
+
+const std::string& PacketSocket::lastError() const {
+    return lastError_;
 }
 
 bool PacketSocket::sendFrame(const std::vector<uint8_t>& frame) {

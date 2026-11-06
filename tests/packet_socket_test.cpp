@@ -4,5 +4,6 @@ constexpr char kMissingInterface[] = "netgpu-no-such-interface";
 
 int main() {
     netgpu::PacketSocket socket;
-    return socket.openOnInterface(kMissingInterface) ? 1 : 0;
+    if (socket.openOnInterface(kMissingInterface)) return 1;
+    return socket.lastError().empty() ? 1 : 0;
 }
