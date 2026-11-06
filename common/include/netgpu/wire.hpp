@@ -50,9 +50,11 @@ enum class HeaderValidationResult {
     invalidHeaderLength,
     fragmentTooLarge,
     messageTooLarge,
-    fragmentOutOfBounds
+    fragmentOutOfBounds,
+    unsupportedMessageType
 };
 
+bool isSupportedMessageType(uint16_t messageType);
 bool hasWireMagic(uint32_t magic);
 bool isSupportedWireVersion(uint16_t version);
 

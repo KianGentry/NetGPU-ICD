@@ -34,6 +34,23 @@ bool isSupportedWireVersion(uint16_t version) {
     return version == kWireVersion;
 }
 
+bool isSupportedMessageType(uint16_t messageType) {
+    switch (static_cast<MessageType>(messageType)) {
+        case MessageType::discoveryRequest:
+        case MessageType::discoveryResponse:
+        case MessageType::handshakeRequest:
+        case MessageType::handshakeResponse:
+        case MessageType::capabilitiesRequest:
+        case MessageType::capabilitiesResponse:
+        case MessageType::request:
+        case MessageType::response:
+        case MessageType::error:
+            return true;
+        default:
+            return false;
+    }
+}
+
 // field order here must match decodeHeader
 WireBytes encodeHeader(const WireHeader& header) {
     WireBytes bytes{};
@@ -79,6 +96,7 @@ WireHeader decodeHeader(const WireBytes& bytes) {
 HeaderValidationResult validateHeader(const WireHeader& header, uint32_t maxFragmentLength) {
     if (!hasWireMagic(header.magic)) return HeaderValidationResult::badMagic;
     if (!isSupportedWireVersion(header.version)) return HeaderValidationResult::unsupportedVersion;
+    if (!isSupportedMessageType(header.messageType)) return HeaderValidationResult::unsupportedMessageType;
     if (header.headerLength != kWireHeaderSize) return HeaderValidationResult::invalidHeaderLength;
     if (header.fragmentLength > maxFragmentLength) return HeaderValidationResult::fragmentTooLarge;
     if (header.totalLength > kMaxMessageSize) return HeaderValidationResult::messageTooLarge;

@@ -4,7 +4,8 @@ constexpr uint32_t kWrongMagic = 0;
 constexpr uint16_t kWrongVersion = 2;
 
 // distinct values so a swapped field shows up
-constexpr uint16_t kSampleMessageType = 0x0102;
+constexpr uint16_t kSampleMessageType = static_cast<uint16_t>(netgpu::MessageType::request);
+constexpr uint16_t kUnknownMessageType = 0xFFFF;
 constexpr uint16_t kSampleFlags = 0x0304;
 constexpr uint32_t kSampleFragmentLength = 0x05060708;
 constexpr uint64_t kSampleDeviceId = 0x1112131415161718;
@@ -148,6 +149,13 @@ bool headerValidationRejectsWrappingFragmentRange() {
     return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::fragmentOutOfBounds;
 }
 
+bool headerValidationRejectsUnsupportedMessageType() {
+    netgpu::WireHeader header = makeSampleHeader();
+    header.messageType = kUnknownMessageType;
+
+    return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::unsupportedMessageType;
+}
+
 // exit code 0 means every check passed
 int main() {
     if (!magicAndVersionAreChecked()) return 1;
@@ -163,6 +171,7 @@ int main() {
     if (!headerValidationRejectsFragmentPastMessageEnd()) return 1;
     if (!headerValidationRejectsOffsetPastMessageEnd()) return 1;
     if (!headerValidationRejectsWrappingFragmentRange()) return 1;
+    if (!headerValidationRejectsUnsupportedMessageType()) return 1;
 
     return 0;
 }
