@@ -112,8 +112,7 @@ int runSender(const std::string& interfaceName, const netgpu::MacAddress& localA
 
     netgpu::PacketSocket socket;
     if (!socket.openOnInterface(interfaceName)) {
-        std::cerr << "could not open AF_PACKET socket on " << interfaceName
-                  << ": " << socket.lastError() << '\n';
+        std::cerr << "could not open AF_PACKET socket on " << interfaceName << ": " << socket.lastError() << '\n';
         return 1;
     }
     if (!sendSmokeMessage(socket, peerAddress, localAddress, kPingType)) {
