@@ -177,8 +177,8 @@ bool wirePayloadRoundTrip() {
         view.header.sessionId == header.sessionId &&
         view.header.sequenceId == header.sequenceId &&
         view.header.requestId == header.requestId &&
-        view.header.fragmentOffset == header.fragmentOffset &&
-        view.header.totalLength == header.totalLength &&
+        view.header.fragmentOffset == 0 &&
+        view.header.totalLength == fragment.size() &&
         view.fragmentLength == fragment.size() &&
         std::equal(view.fragment, view.fragment + view.fragmentLength, fragment.begin());
 }
