@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cstdint>
+#include <cstddef>
+#include <vector>
 
 namespace netgpu {
 
@@ -42,6 +44,15 @@ struct WireHeader {
 };
 
 using WireBytes = std::array<uint8_t, kWireHeaderSize>;
+
+struct WirePayloadView {
+    WireHeader header;
+    const uint8_t* fragment = nullptr;
+    size_t fragmentLength = 0;
+};
+
+bool encodeWirePayload(const WireHeader& header, const std::vector<uint8_t>& fragment, std::vector<uint8_t>& payload);
+bool decodeWirePayload(const uint8_t* payload, size_t payloadLength, WirePayloadView& view);
 
 enum class HeaderValidationResult {
     valid,

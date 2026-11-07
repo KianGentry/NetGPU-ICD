@@ -1,6 +1,7 @@
 #include "netgpu/wire.hpp"
 
 #include <cstddef>
+#include <algorithm>
 
 namespace netgpu {
 
@@ -106,6 +107,39 @@ HeaderValidationResult validateHeader(const WireHeader& header, uint32_t maxFrag
     }
 
     return HeaderValidationResult::valid;
+}
+
+bool encodeWirePayload(const WireHeader& header, const std::vector<uint8_t>& fragment, std::vector<uint8_t>& payload) {
+    WireBytes headerBytes = encodeHeader(header);
+
+    if (fragment.size() != header.fragmentLength) {
+        payload.clear();
+        return false;
+    }
+
+    payload.resize(headerBytes.size() + fragment.size());
+    std::copy(headerBytes.begin(), headerBytes.end(), payload.begin());
+    std::copy(fragment.begin(), fragment.end(), payload.begin() + headerBytes.size());
+
+    return true;
+}
+
+bool decodeWirePayload(const uint8_t* payload, size_t payloadLength, WirePayloadView& view) {
+    view = {};
+    if (payload == nullptr || payloadLength < kWireHeaderSize) return false;
+
+    WireBytes headerBytes{};
+    std::copy_n(payload, kWireHeaderSize, headerBytes.begin());
+    const WireHeader header = decodeHeader(headerBytes);
+
+    const size_t fragmentLength = payloadLength - kWireHeaderSize;
+    if (header.fragmentLength != fragmentLength) return false;
+
+    view.header = header;
+    view.fragment = payload + kWireHeaderSize;
+    view.fragmentLength = fragmentLength;
+
+    return true;
 }
 
 } // namespace netgpu

@@ -23,15 +23,16 @@ constexpr uint32_t kLargestUint32 = 0xFFFFFFFF;
 constexpr uint32_t kMessageLargerThanLimit = netgpu::kMaxMessageSize + 1;
 
 netgpu::WireHeader makeSampleHeader() {
+    std::vector<uint8_t> fragment = {1, 2, 3, 4};
     netgpu::WireHeader header;
     header.messageType = kSampleMessageType;
     header.flags = kSampleFlags;
-    header.fragmentLength = kSampleFragmentLength;
+    header.fragmentLength = fragment.size();
     header.deviceId = kSampleDeviceId;
     header.sessionId = kSampleSessionId;
     header.sequenceId = kSampleSequenceId;
     header.requestId = kSampleRequestId;
-    header.fragmentOffset = kSampleFragmentOffset;
+    header.fragmentOffset = 0;
     header.totalLength = kSampleTotalLength;
     return header;
 }
@@ -156,6 +157,32 @@ bool headerValidationRejectsUnsupportedMessageType() {
     return netgpu::validateHeader(header, kMaxFragmentLength) == netgpu::HeaderValidationResult::unsupportedMessageType;
 }
 
+bool wirePayloadRoundTrip() {
+    netgpu::WireHeader header = makeSampleHeader();
+    std::vector<uint8_t> fragment = {1, 2, 3, 4};
+    std::vector<uint8_t> payload;
+
+    if (!netgpu::encodeWirePayload(header, fragment, payload)) return false;
+
+    netgpu::WirePayloadView view;
+    if (!netgpu::decodeWirePayload(payload.data(), payload.size(), view)) return false;
+
+    return view.header.magic == header.magic &&
+        view.header.version == header.version &&
+        view.header.headerLength == header.headerLength &&
+        view.header.messageType == header.messageType &&
+        view.header.flags == header.flags &&
+        view.header.fragmentLength == header.fragmentLength &&
+        view.header.deviceId == header.deviceId &&
+        view.header.sessionId == header.sessionId &&
+        view.header.sequenceId == header.sequenceId &&
+        view.header.requestId == header.requestId &&
+        view.header.fragmentOffset == header.fragmentOffset &&
+        view.header.totalLength == header.totalLength &&
+        view.fragmentLength == fragment.size() &&
+        std::equal(view.fragment, view.fragment + view.fragmentLength, fragment.begin());
+}
+
 // exit code 0 means every check passed
 int main() {
     if (!magicAndVersionAreChecked()) return 1;
@@ -172,6 +199,7 @@ int main() {
     if (!headerValidationRejectsOffsetPastMessageEnd()) return 1;
     if (!headerValidationRejectsWrappingFragmentRange()) return 1;
     if (!headerValidationRejectsUnsupportedMessageType()) return 1;
+    if (!wirePayloadRoundTrip()) return 1;
 
     return 0;
 }
