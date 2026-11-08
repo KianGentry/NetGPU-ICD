@@ -12,6 +12,10 @@
 - [x] Add a statically linked `packet_link_smoke` utility.
 - [x] Exercise AF_PACKET send/receive in both directions over a private veth pair.
 - [x] Build `packet_link_smoke`, start the listener on the host, then send from the Packard Bell client. Both sides should report that ping/pong completed.
+- [x] Add a `MessageType` enum for discovery, handshake, capabilities, requests, responses and errors.
+- [x] Reject unknown message types in the common validator.
+- [x] Add helpers to encode/decode a `WireHeader` plus fragment as one Ethernet payload.
+- [x] Validate the decoded wire header before exposing the fragment to a handler.
 
 ## Current Focus
 
@@ -22,10 +26,6 @@
 
 ## Ethernet And Wire Integration
 
-- [ ] Add a `MessageType` enum for discovery, handshake, capabilities, requests, responses and errors.
-- [ ] Reject unknown message types in the common validator.
-- [ ] Add helpers to encode/decode a `WireHeader` plus fragment as one Ethernet payload.
-- [ ] Validate the decoded wire header before exposing the fragment to a handler.
 - [ ] Replace the smoke tool's private `NGPU` ping payload with the common wire header and message type.
 - [ ] Query the selected interface MTU and derive the maximum frame payload from it.
 - [ ] Reject outbound frames that exceed the selected interface MTU.
