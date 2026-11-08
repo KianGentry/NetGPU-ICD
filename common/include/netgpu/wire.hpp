@@ -52,7 +52,7 @@ struct WirePayloadView {
 };
 
 bool encodeWirePayload(const WireHeader& header, const std::vector<uint8_t>& fragment, std::vector<uint8_t>& payload);
-bool decodeWirePayload(const uint8_t* payload, size_t payloadLength, WirePayloadView& view);
+bool decodeWirePayload(const uint8_t* payload, size_t payloadLength, WirePayloadView& view, uint32_t maxFragmentLength);
 
 enum class HeaderValidationResult {
     valid,

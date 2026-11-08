@@ -124,7 +124,7 @@ bool encodeWirePayload(const WireHeader& header, const std::vector<uint8_t>& fra
     return true;
 }
 
-bool decodeWirePayload(const uint8_t* payload, size_t payloadLength, WirePayloadView& view) {
+bool decodeWirePayload(const uint8_t* payload, size_t payloadLength, WirePayloadView& view, uint32_t maxFragmentLength) {
     view = {};
     if (payload == nullptr || payloadLength < kWireHeaderSize) return false;
 
@@ -134,6 +134,7 @@ bool decodeWirePayload(const uint8_t* payload, size_t payloadLength, WirePayload
 
     const size_t fragmentLength = payloadLength - kWireHeaderSize;
     if (header.fragmentLength != fragmentLength) return false;
+    if (validateHeader(header, maxFragmentLength) != HeaderValidationResult::valid) return false;
 
     view.header = header;
     view.fragment = payload + kWireHeaderSize;

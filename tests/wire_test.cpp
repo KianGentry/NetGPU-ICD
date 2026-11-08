@@ -7,12 +7,12 @@ constexpr uint16_t kWrongVersion = 2;
 constexpr uint16_t kSampleMessageType = static_cast<uint16_t>(netgpu::MessageType::request);
 constexpr uint16_t kUnknownMessageType = 0xFFFF;
 constexpr uint16_t kSampleFlags = 0x0304;
-constexpr uint32_t kSampleFragmentLength = 0x05060708;
+// constexpr uint32_t kSampleFragmentLength = 0x05060708;
 constexpr uint64_t kSampleDeviceId = 0x1112131415161718;
 constexpr uint64_t kSampleSessionId = 0x2122232425262728;
 constexpr uint64_t kSampleSequenceId = 0x3132333435363738;
 constexpr uint64_t kSampleRequestId = 0x4142434445464748;
-constexpr uint32_t kSampleFragmentOffset = 0x090A0B0C;
+// constexpr uint32_t kSampleFragmentOffset = 0x090A0B0C;
 constexpr uint32_t kSampleTotalLength = 0x0D0E0F10;
 
 constexpr uint8_t kFirstMagicByte = 'N';
@@ -27,13 +27,13 @@ netgpu::WireHeader makeSampleHeader() {
     netgpu::WireHeader header;
     header.messageType = kSampleMessageType;
     header.flags = kSampleFlags;
-    header.fragmentLength = fragment.size();
+    header.fragmentLength = static_cast<uint32_t>(fragment.size());
     header.deviceId = kSampleDeviceId;
     header.sessionId = kSampleSessionId;
     header.sequenceId = kSampleSequenceId;
     header.requestId = kSampleRequestId;
     header.fragmentOffset = 0;
-    header.totalLength = kSampleTotalLength;
+    header.totalLength = static_cast<uint32_t>(fragment.size());
     return header;
 }
 
@@ -165,7 +165,7 @@ bool wirePayloadRoundTrip() {
     if (!netgpu::encodeWirePayload(header, fragment, payload)) return false;
 
     netgpu::WirePayloadView view;
-    if (!netgpu::decodeWirePayload(payload.data(), payload.size(), view)) return false;
+    if (!netgpu::decodeWirePayload(payload.data(), payload.size(), view, kMaxFragmentLength)) return false;
 
     return view.header.magic == header.magic &&
         view.header.version == header.version &&
@@ -177,8 +177,8 @@ bool wirePayloadRoundTrip() {
         view.header.sessionId == header.sessionId &&
         view.header.sequenceId == header.sequenceId &&
         view.header.requestId == header.requestId &&
-        view.header.fragmentOffset == 0 &&
-        view.header.totalLength == fragment.size() &&
+        view.header.fragmentOffset == header.fragmentOffset &&
+        view.header.totalLength == header.totalLength &&
         view.fragmentLength == fragment.size() &&
         std::equal(view.fragment, view.fragment + view.fragmentLength, fragment.begin());
 }
