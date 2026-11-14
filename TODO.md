@@ -16,6 +16,7 @@
 - [x] Reject unknown message types in the common validator.
 - [x] Add helpers to encode/decode a `WireHeader` plus fragment as one Ethernet payload.
 - [x] Validate the decoded wire header before exposing the fragment to a handler.
+- [x] Replace the smoke tool's private `NGPU` ping payload with the common wire header and message type.
 
 ## Current Focus
 
@@ -26,7 +27,6 @@
 
 ## Ethernet And Wire Integration
 
-- [ ] Replace the smoke tool's private `NGPU` ping payload with the common wire header and message type.
 - [ ] Query the selected interface MTU and derive the maximum frame payload from it.
 - [ ] Reject outbound frames that exceed the selected interface MTU.
 - [ ] Add tests for standard MTU, configured jumbo MTU and one-byte-over-limit frames.

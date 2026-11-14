@@ -1,4 +1,5 @@
 #include "netgpu/packet_socket.hpp"
+#include "netgpu/wire.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -7,10 +8,11 @@
 
 namespace {
 
-constexpr size_t kSmokePayloadSize = 46;
 constexpr int kReceiveTimeoutMilliseconds = 10000;
-constexpr uint8_t kPingType = 'P';
-constexpr uint8_t kPongType = 'Q';
+constexpr uint32_t kMaxWireFragmentLength =
+    static_cast<uint32_t>(netgpu::kMaxEthernetPayloadSize - netgpu::kWireHeaderSize);
+constexpr netgpu::MessageType kPingType = netgpu::MessageType::request;
+constexpr netgpu::MessageType kPongType = netgpu::MessageType::response;
 
 int hexDigitValue(char digit) {
     if (digit >= '0' && digit <= '9') return digit - '0';
@@ -35,27 +37,16 @@ bool parseMacAddress(const std::string& text, netgpu::MacAddress& address) {
     return true;
 }
 
-std::vector<uint8_t> makeSmokePayload(uint8_t messageType) {
-    std::vector<uint8_t> payload(kSmokePayloadSize);
-    payload[0] = 'N';
-    payload[1] = 'G';
-    payload[2] = 'P';
-    payload[3] = 'U';
-    payload[4] = messageType;
-    return payload;
-}
-
-bool payloadMatches(const netgpu::EthernetFrameView& frame, uint8_t messageType) {
-    const std::vector<uint8_t> expected = makeSmokePayload(messageType);
-    if (frame.payloadLength != expected.size()) return false;
-    for (size_t i = 0; i < expected.size(); ++i) {
-        if (frame.payload[i] != expected[i]) return false;
-    }
-    return true;
+bool payloadMatches(const netgpu::EthernetFrameView& frame, netgpu::MessageType messageType) {
+    netgpu::WirePayloadView payload;
+    if (!netgpu::decodeWirePayload(frame.payload, frame.payloadLength, payload,
+        kMaxWireFragmentLength)) return false;
+    return payload.header.messageType == static_cast<uint16_t>(messageType)
+        && payload.fragmentLength == 0;
 }
 
 bool receiveSmokeMessage(netgpu::PacketSocket& socket, const netgpu::MacAddress& localAddress, 
-    const netgpu::MacAddress* peerAddress, uint8_t messageType,
+    const netgpu::MacAddress* peerAddress, netgpu::MessageType messageType,
     netgpu::MacAddress& sourceAddress) {
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kReceiveTimeoutMilliseconds);
@@ -78,10 +69,16 @@ bool receiveSmokeMessage(netgpu::PacketSocket& socket, const netgpu::MacAddress&
 }
 
 bool sendSmokeMessage(netgpu::PacketSocket& socket, const netgpu::MacAddress& destination,
-    const netgpu::MacAddress& source, uint8_t messageType) {
+    const netgpu::MacAddress& source, netgpu::MessageType messageType) {
+
+    netgpu::WireHeader header;
+    header.messageType = static_cast<uint16_t>(messageType);
+    const std::vector<uint8_t> fragment;
+    std::vector<uint8_t> payload;
+    if (!netgpu::encodeWirePayload(header, fragment, payload)) return false;
 
     std::vector<uint8_t> frame;
-    if (!netgpu::encodeEthernetFrame(destination, source, makeSmokePayload(messageType),
+    if (!netgpu::encodeEthernetFrame(destination, source, payload,
         netgpu::kMaxEthernetPayloadSize, frame)) return false;
     return socket.sendFrame(frame);
 }
