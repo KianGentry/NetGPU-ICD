@@ -35,8 +35,6 @@ private:
     bool writeHeaderAndPayload(const WireBytes& headerBytes,
         const std::vector<uint8_t>& payload);
     std::optional<WireHeader> readAndValidateHeader();
-    std::optional<size_t> validateAndGetPayloadSize(
-        const WireHeader& header) const;
     std::optional<std::vector<uint8_t>> readPayload(size_t payloadSize);
     TransportMessage buildTransportMessage(WireHeader header,
         std::vector<uint8_t> payload) const;

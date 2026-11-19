@@ -57,11 +57,6 @@ bool startListening(SocketDescriptor& socket, int backlog) {
     return listen(socket.get(), backlog) == 0;
 }
 
-enum class TransferDirection {
-    read,
-    write
-};
-
 ssize_t readSomeBytes(int socketFd, uint8_t* bytes, size_t byteCount) {
     return recv(socketFd, bytes, byteCount, 0);
 }
@@ -70,13 +65,13 @@ ssize_t writeSomeBytes(int socketFd, const uint8_t* bytes, size_t byteCount) {
     return send(socketFd, bytes, byteCount, MSG_NOSIGNAL);
 }
 
-bool transferExactly(int socketFd, uint8_t* bytes, size_t byteCount,
-    TransferDirection direction) {
+template<typename BytePointer, typename TransferSome>
+bool transferExactly(int socketFd, BytePointer bytes, size_t byteCount,
+    TransferSome transferSome) {
     size_t transferred = 0;
     while (transferred < byteCount) {
-        const ssize_t result = direction == TransferDirection::read
-            ? readSomeBytes(socketFd, bytes + transferred, byteCount - transferred)
-            : writeSomeBytes(socketFd, bytes + transferred, byteCount - transferred);
+        const ssize_t result = transferSome(
+            socketFd, bytes + transferred, byteCount - transferred);
         if (result == 0) return false;
         if (result < 0) {
             if (errno == EINTR) continue;
@@ -151,14 +146,13 @@ bool UnixDomainSocket::acceptClient(UnixDomainSocket& client) {
 bool UnixDomainSocket::readExactly(MutableByteView destination) {
     return socketDescriptor_.isValid()
         && transferExactly(socketDescriptor_.get(), destination.data,
-            destination.size, TransferDirection::read);
+            destination.size, readSomeBytes);
 }
 
 bool UnixDomainSocket::writeExactly(ByteView source) {
-    uint8_t* mutableBytes = const_cast<uint8_t*>(source.data);
     return socketDescriptor_.isValid()
-        && transferExactly(socketDescriptor_.get(), mutableBytes,
-            source.size, TransferDirection::write);
+        && transferExactly(socketDescriptor_.get(), source.data,
+            source.size, writeSomeBytes);
 }
 
 } // namespace netgpu

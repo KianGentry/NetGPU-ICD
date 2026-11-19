@@ -33,12 +33,6 @@ std::optional<WireHeader> ITransport::readAndValidateHeader() {
     return header;
 }
 
-std::optional<size_t> ITransport::validateAndGetPayloadSize(
-    const WireHeader& header) const {
-    if (header.fragmentLength > maxFragmentLength_) return std::nullopt;
-    return static_cast<size_t>(header.fragmentLength);
-}
-
 std::optional<std::vector<uint8_t>> ITransport::readPayload(size_t payloadSize) {
     std::vector<uint8_t> payload(payloadSize);
     if (!readExactly(MutableByteView{payload.data(), payload.size()})) {
@@ -63,9 +57,8 @@ bool ITransport::receiveMessage(TransportMessage& message) {
     std::lock_guard<std::mutex> lock(receiveMutex_);
     const auto header = readAndValidateHeader();
     if (!header) return false;
-    const auto payloadSize = validateAndGetPayloadSize(*header);
-    if (!payloadSize) return false;
-    const auto payload = readPayload(*payloadSize);
+    const size_t payloadSize = static_cast<size_t>(header->fragmentLength);
+    const auto payload = readPayload(payloadSize);
     if (!payload) return false;
     message = buildTransportMessage(*header, std::move(*payload));
     return true;
