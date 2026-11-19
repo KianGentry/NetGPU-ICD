@@ -1,6 +1,7 @@
 #pragma once
 
 #include "netgpu/transport.hpp"
+#include "netgpu/socket_descriptor.hpp"
 #include <string>
 
 namespace netgpu {
@@ -20,10 +21,10 @@ public:
     bool acceptClient(UnixDomainSocket& client);
 
 private:
-    bool readExactBytes(uint8_t* bytes, size_t byteCount) override;
-    bool writeExactBytes(const uint8_t* bytes, size_t byteCount) override;
+    bool readExactly(MutableByteView destination) override;
+    bool writeExactly(ByteView source) override;
 
-    int socketFd_;
+    SocketDescriptor socketDescriptor_;
     std::string boundPath_;
 };
 

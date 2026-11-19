@@ -7,25 +7,66 @@ namespace netgpu {
 
 namespace {
 
-constexpr int kBitsPerByte = 8;
+constexpr uint32_t kBytesInUint16 = 2;
+constexpr uint32_t kBytesInUint32 = 4;
+constexpr uint32_t kBytesInUint64 = 8;
 
-// most significant byte first, cursor moves past the value
-void writeBigEndian(uint8_t*& cursor, uint64_t value, size_t byteCount) {
-    for (size_t i = byteCount; i > 0; --i) {
-        *cursor++ = static_cast<uint8_t>(value >> ((i - 1) * kBitsPerByte));
-    }
+} // namespace
+
+void WireWriter::writeUint16(uint16_t value) {
+    bytes_[cursor_] = static_cast<uint8_t>(value >> 8);
+    bytes_[cursor_ + 1] = static_cast<uint8_t>(value);
+    cursor_ += kBytesInUint16;
 }
 
-// cursor moves past the value
-uint64_t readBigEndian(const uint8_t*& cursor, size_t byteCount) {
-    uint64_t value = 0;
-    for (size_t i = 0; i < byteCount; ++i) {
-        value = (value << kBitsPerByte) | *cursor++;
+void WireWriter::writeUint32(uint32_t value) {
+    for (size_t offset = kBytesInUint32; offset > 0; --offset) {
+        bytes_[cursor_ + offset - 1] = static_cast<uint8_t>(value >> ((kBytesInUint32 - offset) * 8));
     }
+    cursor_ += kBytesInUint32;
+}
+
+void WireWriter::writeUint64(uint64_t value) {
+    for (size_t offset = kBytesInUint64; offset > 0; --offset) {
+        bytes_[cursor_ + offset - 1] = static_cast<uint8_t>(value >> ((kBytesInUint64 - offset) * 8));
+    }
+    cursor_ += kBytesInUint64;
+}
+
+WireBytes WireWriter::finish() const {
+    return bytes_;
+}
+
+WireReader::WireReader(const WireBytes& bytes)
+    : bytes_{bytes.data(), bytes.size()} {}
+
+WireReader::WireReader(ByteView bytes) : bytes_(bytes) {}
+
+uint16_t WireReader::readUint16() {
+    const uint16_t value = static_cast<uint16_t>(
+        (static_cast<uint16_t>(bytes_.data[cursor_]) << 8)
+        | bytes_.data[cursor_ + 1]);
+    cursor_ += kBytesInUint16;
     return value;
 }
 
-} // namespace
+uint32_t WireReader::readUint32() {
+    uint32_t value = 0;
+    for (size_t offset = 0; offset < kBytesInUint32; ++offset) {
+        value = (value << 8) | bytes_.data[cursor_ + offset];
+    }
+    cursor_ += kBytesInUint32;
+    return value;
+}
+
+uint64_t WireReader::readUint64() {
+    uint64_t value = 0;
+    for (size_t offset = 0; offset < kBytesInUint64; ++offset) {
+        value = (value << 8) | bytes_.data[cursor_ + offset];
+    }
+    cursor_ += kBytesInUint64;
+    return value;
+}
 
 bool hasWireMagic(uint32_t magic) {
     return magic == kWireMagic;
@@ -52,95 +93,116 @@ bool isSupportedMessageType(uint16_t messageType) {
     }
 }
 
-// field order here must match decodeHeader
 WireBytes encodeHeader(const WireHeader& header) {
-    WireBytes bytes{};
-    uint8_t* cursor = bytes.data();
-
-    writeBigEndian(cursor, header.magic, sizeof(header.magic));
-    writeBigEndian(cursor, header.version, sizeof(header.version));
-    writeBigEndian(cursor, header.headerLength, sizeof(header.headerLength));
-    writeBigEndian(cursor, header.messageType, sizeof(header.messageType));
-    writeBigEndian(cursor, header.flags, sizeof(header.flags));
-    writeBigEndian(cursor, header.fragmentLength, sizeof(header.fragmentLength));
-    writeBigEndian(cursor, header.deviceId, sizeof(header.deviceId));
-    writeBigEndian(cursor, header.sessionId, sizeof(header.sessionId));
-    writeBigEndian(cursor, header.sequenceId, sizeof(header.sequenceId));
-    writeBigEndian(cursor, header.requestId, sizeof(header.requestId));
-    writeBigEndian(cursor, header.fragmentOffset, sizeof(header.fragmentOffset));
-    writeBigEndian(cursor, header.totalLength, sizeof(header.totalLength));
-
-    return bytes;
+    WireWriter writer;
+    writer.writeUint32(header.magic);
+    writer.writeUint16(header.version);
+    writer.writeUint16(header.headerLength);
+    writer.writeUint16(header.messageType);
+    writer.writeUint16(header.flags);
+    writer.writeUint32(header.fragmentLength);
+    writer.writeUint64(header.deviceId);
+    writer.writeUint64(header.sessionId);
+    writer.writeUint64(header.sequenceId);
+    writer.writeUint64(header.requestId);
+    writer.writeUint32(header.fragmentOffset);
+    writer.writeUint32(header.totalLength);
+    return writer.finish();
 }
 
-// field order here must match encodeHeader
 WireHeader decodeHeader(const WireBytes& bytes) {
     WireHeader header;
-    const uint8_t* cursor = bytes.data();
-
-    header.magic = static_cast<uint32_t>(readBigEndian(cursor, sizeof(header.magic)));
-    header.version = static_cast<uint16_t>(readBigEndian(cursor, sizeof(header.version)));
-    header.headerLength = static_cast<uint16_t>(readBigEndian(cursor, sizeof(header.headerLength)));
-    header.messageType = static_cast<uint16_t>(readBigEndian(cursor, sizeof(header.messageType)));
-    header.flags = static_cast<uint16_t>(readBigEndian(cursor, sizeof(header.flags)));
-    header.fragmentLength = static_cast<uint32_t>(readBigEndian(cursor, sizeof(header.fragmentLength)));
-    header.deviceId = readBigEndian(cursor, sizeof(header.deviceId));
-    header.sessionId = readBigEndian(cursor, sizeof(header.sessionId));
-    header.sequenceId = readBigEndian(cursor, sizeof(header.sequenceId));
-    header.requestId = readBigEndian(cursor, sizeof(header.requestId));
-    header.fragmentOffset = static_cast<uint32_t>(readBigEndian(cursor, sizeof(header.fragmentOffset)));
-    header.totalLength = static_cast<uint32_t>(readBigEndian(cursor, sizeof(header.totalLength)));
-
+    WireReader reader(bytes);
+    header.magic = reader.readUint32();
+    header.version = reader.readUint16();
+    header.headerLength = reader.readUint16();
+    header.messageType = reader.readUint16();
+    header.flags = reader.readUint16();
+    header.fragmentLength = reader.readUint32();
+    header.deviceId = reader.readUint64();
+    header.sessionId = reader.readUint64();
+    header.sequenceId = reader.readUint64();
+    header.requestId = reader.readUint64();
+    header.fragmentOffset = reader.readUint32();
+    header.totalLength = reader.readUint32();
     return header;
 }
 
-HeaderValidationResult validateHeader(const WireHeader& header, uint32_t maxFragmentLength) {
+HeaderValidationResult validateHeaderIdentity(const WireHeader& header) {
     if (!hasWireMagic(header.magic)) return HeaderValidationResult::badMagic;
     if (!isSupportedWireVersion(header.version)) return HeaderValidationResult::unsupportedVersion;
     if (!isSupportedMessageType(header.messageType)) return HeaderValidationResult::unsupportedMessageType;
-    if (header.headerLength != kWireHeaderSize) return HeaderValidationResult::invalidHeaderLength;
-    if (header.fragmentLength > maxFragmentLength) return HeaderValidationResult::fragmentTooLarge;
-    if (header.totalLength > kMaxMessageSize) return HeaderValidationResult::messageTooLarge;
-    if (header.fragmentOffset > header.totalLength) return HeaderValidationResult::fragmentOutOfBounds;
-    if (header.fragmentLength > header.totalLength - header.fragmentOffset) {
-        return HeaderValidationResult::fragmentOutOfBounds;
-    }
-
     return HeaderValidationResult::valid;
 }
 
-bool encodeWirePayload(const WireHeader& header, const std::vector<uint8_t>& fragment, std::vector<uint8_t>& payload) {
-    WireBytes headerBytes = encodeHeader(header);
+HeaderValidationResult validateHeaderLength(const WireHeader& header) {
+    return header.headerLength == kWireHeaderSize
+        ? HeaderValidationResult::valid
+        : HeaderValidationResult::invalidHeaderLength;
+}
 
+HeaderValidationResult validateFragmentSize(const WireHeader& header, uint32_t maxFragmentLength) {
+    return header.fragmentLength <= maxFragmentLength
+        ? HeaderValidationResult::valid
+        : HeaderValidationResult::fragmentTooLarge;
+}
+
+HeaderValidationResult validateMessageSize(const WireHeader& header) {
+    return header.totalLength <= kMaxMessageSize
+        ? HeaderValidationResult::valid
+        : HeaderValidationResult::messageTooLarge;
+}
+
+HeaderValidationResult validateFragmentBounds(const WireHeader& header) {
+    if (header.fragmentOffset > header.totalLength) {
+        return HeaderValidationResult::fragmentOutOfBounds;
+    }
+    const uint32_t remainingMessageLength = header.totalLength - header.fragmentOffset;
+    if (header.fragmentLength > remainingMessageLength) {
+        return HeaderValidationResult::fragmentOutOfBounds;
+    }
+    return HeaderValidationResult::valid;
+}
+
+HeaderValidationResult validateHeader(const WireHeader& header, uint32_t maxFragmentLength) {
+    if (const auto result = validateHeaderIdentity(header); result != HeaderValidationResult::valid) return result;
+    if (const auto result = validateHeaderLength(header); result != HeaderValidationResult::valid) return result;
+    if (const auto result = validateFragmentSize(header, maxFragmentLength); result != HeaderValidationResult::valid) return result;
+    if (const auto result = validateMessageSize(header); result != HeaderValidationResult::valid) return result;
+    if (const auto result = validateFragmentBounds(header); result != HeaderValidationResult::valid) return result;
+    return HeaderValidationResult::valid;
+}
+
+std::optional<std::vector<uint8_t>> encodeWirePayload(
+    const WireHeader& header, const std::vector<uint8_t>& fragment) {
     if (fragment.size() != header.fragmentLength) {
-        payload.clear();
-        return false;
+        return std::nullopt;
     }
 
+    const WireBytes headerBytes = encodeHeader(header);
+    std::vector<uint8_t> payload;
     payload.resize(headerBytes.size() + fragment.size());
     std::copy(headerBytes.begin(), headerBytes.end(), payload.begin());
     std::copy(fragment.begin(), fragment.end(), payload.begin() + headerBytes.size());
-
-    return true;
+    return payload;
 }
 
-bool decodeWirePayload(const uint8_t* payload, size_t payloadLength, WirePayloadView& view, uint32_t maxFragmentLength) {
-    view = {};
-    if (payload == nullptr || payloadLength < kWireHeaderSize) return false;
+std::optional<WirePayloadView> decodeWirePayload(
+    ByteView payload, uint32_t maxFragmentLength) {
+    if (payload.data == nullptr || payload.size < kWireHeaderSize) return std::nullopt;
 
     WireBytes headerBytes{};
-    std::copy_n(payload, kWireHeaderSize, headerBytes.begin());
+    std::copy_n(payload.data, kWireHeaderSize, headerBytes.begin());
     const WireHeader header = decodeHeader(headerBytes);
 
-    const size_t fragmentLength = payloadLength - kWireHeaderSize;
-    if (header.fragmentLength != fragmentLength) return false;
-    if (validateHeader(header, maxFragmentLength) != HeaderValidationResult::valid) return false;
+    const size_t fragmentLength = payload.size - kWireHeaderSize;
+    if (header.fragmentLength != fragmentLength) return std::nullopt;
+    if (validateHeader(header, maxFragmentLength) != HeaderValidationResult::valid) return std::nullopt;
 
-    view.header = header;
-    view.fragment = payload + kWireHeaderSize;
-    view.fragmentLength = fragmentLength;
-
-    return true;
+    return WirePayloadView{
+        header,
+        ByteView{payload.data + kWireHeaderSize, fragmentLength}
+    };
 }
 
 } // namespace netgpu

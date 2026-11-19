@@ -1,6 +1,7 @@
 #pragma once
 
 #include "netgpu/ethernet_frame.hpp"
+#include "netgpu/socket_descriptor.hpp"
 
 #include <string>
 #include <vector>
@@ -22,7 +23,7 @@ public:
     const std::string& lastError() const;
 
 private:
-    int socketFd_ = -1;
+    SocketDescriptor socketDescriptor_;
     int interfaceIndex_ = 0;
     MacAddress localAddress_{};
     std::string lastError_;

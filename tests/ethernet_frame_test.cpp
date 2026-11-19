@@ -1,5 +1,7 @@
 #include "netgpu/ethernet_frame.hpp"
 
+#include <algorithm>
+
 constexpr size_t kInterfacePayloadLimit = 1500;
 constexpr size_t kTruncatedFrameLength = netgpu::kEthernetHeaderSize - 1;
 
@@ -13,11 +15,9 @@ bool frameRoundTrips() {
 
     netgpu::EthernetFrameView view;
     if (!netgpu::decodeEthernetFrame(frame.data(), frame.size(), kInterfacePayloadLimit, view)) return false;
-    if (view.destination != kDestination || view.source != kSource || view.payloadLength != payload.size()) return false;
-    for (size_t i = 0; i < payload.size(); ++i) {
-        if (view.payload[i] != payload[i]) return false;
-    }
-    return true;
+    if (view.destination != kDestination || view.source != kSource) return false;
+    if (view.payloadLength != payload.size()) return false;
+    return std::equal(view.payload, view.payload + view.payloadLength, payload.begin());
 }
 
 bool oversizedPayloadIsRejected() {
@@ -30,7 +30,7 @@ bool wrongEtherTypeIsRejected() {
     const std::vector<uint8_t> payload;
     std::vector<uint8_t> frame;
     if (!netgpu::encodeEthernetFrame(kDestination, kSource, payload, kInterfacePayloadLimit, frame)) return false;
-    frame[netgpu::kEthernetAddressSize * 2] = 0;
+    frame[netgpu::EthernetFrameLayout::etherTypeOffset] = 0;
 
     netgpu::EthernetFrameView view;
     return !netgpu::decodeEthernetFrame(frame.data(), frame.size(), kInterfacePayloadLimit, view);
@@ -42,10 +42,20 @@ bool truncatedFrameIsRejected() {
     return !netgpu::decodeEthernetFrame(frame.data(), frame.size(), kInterfacePayloadLimit, view);
 }
 
+bool payloadLimitsAreSplitAndChecked() {
+    return netgpu::fitsInterfacePayloadLimit(kInterfacePayloadLimit, kInterfacePayloadLimit)
+        && !netgpu::fitsInterfacePayloadLimit(kInterfacePayloadLimit + 1, kInterfacePayloadLimit)
+        && netgpu::fitsEthernetPayloadLimit(netgpu::kMaxEthernetPayloadSize)
+        && !netgpu::fitsEthernetPayloadLimit(netgpu::kMaxEthernetPayloadSize + 1)
+        && netgpu::fitsPayloadLimits(kInterfacePayloadLimit, kInterfacePayloadLimit)
+        && !netgpu::fitsPayloadLimits(netgpu::kMaxEthernetPayloadSize + 1, netgpu::kMaxEthernetPayloadSize + 1);
+}
+
 int main() {
     if (!frameRoundTrips()) return 1;
     if (!oversizedPayloadIsRejected()) return 1;
     if (!wrongEtherTypeIsRejected()) return 1;
     if (!truncatedFrameIsRejected()) return 1;
+    if (!payloadLimitsAreSplitAndChecked()) return 1;
     return 0;
 }

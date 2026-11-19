@@ -20,7 +20,7 @@
 
 ## Current Focus
 
-- [-] After the physical ping/pong passes, replace the private payload with the common wire header and message types. The Ethernet codec owns the outer frame; `common` owns the transport-independent header and validation. This is the boundary the daemon will later consume.
+- [x] After the physical ping/pong passes, replace the private payload with the common wire header and message types. The Ethernet codec owns the outer frame; `common` owns the transport-independent header and validation. This is the boundary the daemon will later consume.
 - [ ] Then implement discovery/handshake and the Vulkan-free `netgpu-hostd` dispatcher. It should validate frames before dispatch, answer supported discovery messages, and explicitly reject unsupported ones; the shader-module and command-buffer handlers remain stubs.
 - [ ] Before adding host GPU execution, verify the GT 710 and native Vulkan driver, then build the host Vulkan context and minimal executor. Keep hostd pinned to that native driver so it cannot recursively load the NetGPU ICD.
 - [ ] Once the host path is understood, add the client ICD manifest and loader-entrypoint skeleton. Test it in isolation with `VK_DRIVER_FILES`; it should safely enumerate zero remote devices until discovery exists.

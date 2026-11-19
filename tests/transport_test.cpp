@@ -2,6 +2,9 @@
 
 #include <array>
 #include <cstdlib>
+#include <future>
+#include <iostream>
+#include <optional>
 #include <string>
 #include <sys/socket.h>
 #include <thread>
@@ -23,15 +26,70 @@ constexpr uint16_t kRequestMessageType = 2;
 constexpr uint16_t kResponseMessageType = 3;
 constexpr int kListenBacklog = 1;
 
+class SocketPair {
+public:
+    SocketPair() {
+        valid_ = socketpair(AF_UNIX, SOCK_STREAM, 0, descriptors_) == 0;
+    }
+
+    ~SocketPair() {
+        closeDescriptor(0);
+        closeDescriptor(1);
+    }
+
+    SocketPair(const SocketPair&) = delete;
+    SocketPair& operator=(const SocketPair&) = delete;
+
+    bool isValid() const {
+        return valid_;
+    }
+
+    int get(size_t index) const {
+        return descriptors_[index];
+    }
+
+    int release(size_t index) {
+        const int descriptor = descriptors_[index];
+        descriptors_[index] = -1;
+        return descriptor;
+    }
+
+private:
+    void closeDescriptor(size_t index) {
+        if (descriptors_[index] >= 0) {
+            close(descriptors_[index]);
+            descriptors_[index] = -1;
+        }
+    }
+
+    int descriptors_[2] = {-1, -1};
+    bool valid_ = false;
+};
+
+class TemporarySocketDirectory {
+public:
+    ~TemporarySocketDirectory() {
+        if (!path_.empty()) rmdir(path_.c_str());
+    }
+
+    bool create() {
+        char directoryTemplate[] = "/tmp/netgpu-transport-XXXXXX";
+        char* createdDirectory = mkdtemp(directoryTemplate);
+        if (createdDirectory == nullptr) return false;
+        path_ = createdDirectory;
+        return true;
+    }
+
+    const std::string& path() const {
+        return path_;
+    }
+
+private:
+    std::string path_;
+};
+
 bool setSocketBufferSize(int socketFd, int option, int size) {
     return setsockopt(socketFd, SOL_SOCKET, option, &size, sizeof(size)) == 0;
-}
-
-bool makeSocketPair(int socketFds[2]) {
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds) < 0) return false;
-    if (!setSocketBufferSize(socketFds[0], SO_SNDBUF, kSmallSocketBufferSize)) return false;
-    if (!setSocketBufferSize(socketFds[1], SO_RCVBUF, kSmallSocketBufferSize)) return false;
-    return true;
 }
 
 std::vector<uint8_t> makePayload() {
@@ -52,22 +110,22 @@ netgpu::WireHeader makeHeader() {
 }
 
 bool largeMessageSurvivesStreamTransport() {
-    int socketFds[2];
-    if (!makeSocketPair(socketFds)) return false;
+    SocketPair sockets;
+    if (!sockets.isValid()) return false;
+    if (!setSocketBufferSize(sockets.get(0), SO_SNDBUF, kSmallSocketBufferSize)) return false;
+    if (!setSocketBufferSize(sockets.get(1), SO_RCVBUF, kSmallSocketBufferSize)) return false;
 
-    netgpu::UnixDomainSocket sender(socketFds[0], kMaxFragmentLength);
-    netgpu::UnixDomainSocket receiver(socketFds[1], kMaxFragmentLength);
+    netgpu::UnixDomainSocket sender(sockets.release(0), kMaxFragmentLength);
+    netgpu::UnixDomainSocket receiver(sockets.release(1), kMaxFragmentLength);
     const netgpu::WireHeader expectedHeader = makeHeader();
     const std::vector<uint8_t> expectedPayload = makePayload();
 
-    bool sent = false;
-    std::thread senderThread([&] {
-        sent = sender.sendMessage(expectedHeader, expectedPayload);
-    });
+    std::future<bool> sendResult = std::async(std::launch::async,
+        [&] { return sender.sendMessage(expectedHeader, expectedPayload); });
 
     netgpu::TransportMessage received;
     const bool receivedMessage = receiver.receiveMessage(received);
-    senderThread.join();
+    const bool sent = sendResult.get();
 
     return sent
         && receivedMessage
@@ -77,34 +135,32 @@ bool largeMessageSurvivesStreamTransport() {
 }
 
 bool receiveFailsOnPartialHeader() {
-    int socketFds[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds) < 0) return false;
+    SocketPair sockets;
+    if (!sockets.isValid()) return false;
 
-    netgpu::UnixDomainSocket receiver(socketFds[0], kSmallMaxFragmentLength);
+    netgpu::UnixDomainSocket receiver(sockets.release(0), kSmallMaxFragmentLength);
     const netgpu::WireBytes headerBytes = netgpu::encodeHeader(makeHeader());
-    const ssize_t sentBytes = send(socketFds[1], headerBytes.data(), kPartialHeaderSize, 0);
-    shutdown(socketFds[1], SHUT_WR);
-    close(socketFds[1]);
+    const ssize_t sentBytes = send(sockets.get(1), headerBytes.data(), kPartialHeaderSize, 0);
+    shutdown(sockets.get(1), SHUT_WR);
 
     netgpu::TransportMessage message;
     return sentBytes == static_cast<ssize_t>(kPartialHeaderSize) && !receiver.receiveMessage(message);
 }
 
 bool receiveFailsOnPartialPayload() {
-    int socketFds[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds) < 0) return false;
+    SocketPair sockets;
+    if (!sockets.isValid()) return false;
 
-    netgpu::UnixDomainSocket receiver(socketFds[0], kSmallMaxFragmentLength);
+    netgpu::UnixDomainSocket receiver(sockets.release(0), kSmallMaxFragmentLength);
     netgpu::WireHeader header;
     header.messageType = kTestMessageType;
     header.fragmentLength = static_cast<uint32_t>(kSmallPayloadSize);
     header.totalLength = header.fragmentLength;
     const netgpu::WireBytes headerBytes = netgpu::encodeHeader(header);
     const std::array<uint8_t, kPartialPayloadSize> payload{};
-    const ssize_t sentHeaderBytes = send(socketFds[1], headerBytes.data(), headerBytes.size(), 0);
-    const ssize_t sentPayloadBytes = send(socketFds[1], payload.data(), payload.size(), 0);
-    shutdown(socketFds[1], SHUT_WR);
-    close(socketFds[1]);
+    const ssize_t sentHeaderBytes = send(sockets.get(1), headerBytes.data(), headerBytes.size(), 0);
+    const ssize_t sentPayloadBytes = send(sockets.get(1), payload.data(), payload.size(), 0);
+    shutdown(sockets.get(1), SHUT_WR);
 
     netgpu::TransportMessage message;
     return sentHeaderBytes == static_cast<ssize_t>(headerBytes.size())
@@ -113,11 +169,11 @@ bool receiveFailsOnPartialPayload() {
 }
 
 bool sendFailsWhenPeerCloses() {
-    int socketFds[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds) < 0) return false;
+    SocketPair sockets;
+    if (!sockets.isValid()) return false;
 
-    netgpu::UnixDomainSocket sender(socketFds[0], kSmallMaxFragmentLength);
-    close(socketFds[1]);
+    netgpu::UnixDomainSocket sender(sockets.release(0), kSmallMaxFragmentLength);
+    close(sockets.release(1));
 
     netgpu::WireHeader header;
     header.messageType = kTestMessageType;
@@ -198,70 +254,64 @@ bool receiveConcurrentResponses(netgpu::UnixDomainSocket& client) {
 }
 
 bool runConcurrentClient(netgpu::UnixDomainSocket& client) {
-    std::array<bool, kConcurrentSenderCount> sendResults{};
-    bool responsesReceived = false;
-    std::thread responseThread([&] {
-        responsesReceived = receiveConcurrentResponses(client);
-    });
+    std::future<bool> responsesReceived = std::async(std::launch::async,
+        [&] { return receiveConcurrentResponses(client); });
 
-    std::array<std::thread, kConcurrentSenderCount> senderThreads;
-    for (size_t i = 0; i < senderThreads.size(); ++i) {
-        senderThreads[i] = std::thread([&, i] {
-            sendResults[i] = sendConcurrentRequests(client, i);
-        });
+    std::array<std::future<bool>, kConcurrentSenderCount> sendResults;
+    for (size_t senderIndex = 0; senderIndex < sendResults.size(); ++senderIndex) {
+        sendResults[senderIndex] = std::async(std::launch::async,
+            [&client, senderIndex] {
+                return sendConcurrentRequests(client, senderIndex);
+            });
     }
 
-    for (std::thread& senderThread : senderThreads) senderThread.join();
-    responseThread.join();
-
-    if (!responsesReceived) return false;
-    for (bool sendSucceeded : sendResults) {
-        if (!sendSucceeded) return false;
+    if (!responsesReceived.get()) return false;
+    for (std::future<bool>& sendResult : sendResults) {
+        if (!sendResult.get()) return false;
     }
-    return true;
-}
-
-bool createTemporarySocketDirectory(std::string& directory) {
-    char directoryTemplate[] = "/tmp/netgpu-transport-XXXXXX";
-    char* createdDirectory = mkdtemp(directoryTemplate);
-    if (createdDirectory == nullptr) return false;
-    directory = createdDirectory;
     return true;
 }
 
 bool endToEndConcurrentMessagesSurvive() {
-    std::string directory;
-    if (!createTemporarySocketDirectory(directory)) return false;
+    TemporarySocketDirectory directory;
+    if (!directory.create()) return false;
 
-    const std::string socketPath = directory + "/host.sock";
+    const std::string socketPath = directory.path() + "/host.sock";
     bool testPassed = false;
     {
         netgpu::UnixDomainSocket listener(kMaxFragmentLength);
         if (listener.listenAt(socketPath, kListenBacklog)) {
             netgpu::UnixDomainSocket client(kMaxFragmentLength);
             if (client.connectTo(socketPath)) {
-                bool hostSessionPassed = false;
-                std::thread hostThread([&] {
-                    hostSessionPassed = runHostSession(listener);
-                });
+                std::future<bool> hostSessionPassed = std::async(std::launch::async,
+                    [&] { return runHostSession(listener); });
 
                 const bool clientSessionPassed = runConcurrentClient(client);
-                hostThread.join();
-                testPassed = clientSessionPassed && hostSessionPassed;
+                testPassed = clientSessionPassed && hostSessionPassed.get();
             }
         }
     }
-    rmdir(directory.c_str());
     return testPassed;
 }
 
 // exit code zero means every check passed
 int main() {
-    if (!largeMessageSurvivesStreamTransport()) return 1;
-    if (!receiveFailsOnPartialHeader()) return 1;
-    if (!receiveFailsOnPartialPayload()) return 1;
-    if (!sendFailsWhenPeerCloses()) return 1;
-    if (!endToEndConcurrentMessagesSurvive()) return 1;
-
+    struct TransportTestCase {
+        const char* name;
+        bool (*run)();
+    };
+    const TransportTestCase tests[] = {
+        {"largeMessageSurvivesStreamTransport", largeMessageSurvivesStreamTransport},
+        {"receiveFailsOnPartialHeader", receiveFailsOnPartialHeader},
+        {"receiveFailsOnPartialPayload", receiveFailsOnPartialPayload},
+        {"sendFailsWhenPeerCloses", sendFailsWhenPeerCloses},
+        {"endToEndConcurrentMessagesSurvive", endToEndConcurrentMessagesSurvive}
+    };
+    for (const TransportTestCase& test : tests) {
+        if (!test.run()) {
+            std::cerr << test.name << " failed\n";
+            return 1;
+        }
+    }
     return 0;
 }
