@@ -47,5 +47,6 @@ bool decodeEthernetFrame(const uint8_t* frame, size_t frameLength,
 bool fitsInterfacePayloadLimit(size_t payloadLength, size_t maxPayloadLength);
 bool fitsEthernetPayloadLimit(size_t payloadLength);
 bool fitsPayloadLimits(size_t payloadLength, size_t maxPayloadLength);
+size_t deriveInterfacePayloadLimit(size_t mtu);
 
 } // namespace netgpu

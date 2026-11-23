@@ -50,6 +50,10 @@ bool fitsPayloadLimits(size_t payloadLength, size_t maxPayloadLength) {
         && fitsEthernetPayloadLimit(payloadLength);
 }
 
+size_t deriveInterfacePayloadLimit(size_t mtu) {
+    return std::min(mtu, kMaxEthernetPayloadSize);
+}
+
 bool encodeEthernetFrame(const MacAddress& destination, const MacAddress& source,
     const std::vector<uint8_t>& payload, size_t maxPayloadLength, std::vector<uint8_t>& frame) {
 

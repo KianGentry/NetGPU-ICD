@@ -27,7 +27,7 @@
 
 ## Ethernet And Wire Integration
 
-- [ ] Query the selected interface MTU and derive the maximum frame payload from it.
+- [x] Query the selected interface MTU and derive the maximum frame payload from it.
 - [ ] Reject outbound frames that exceed the selected interface MTU.
 - [ ] Add tests for standard MTU, configured jumbo MTU and one-byte-over-limit frames.
 - [ ] Add explicit VLAN-tag handling, or reject tagged frames with a clear diagnostic.

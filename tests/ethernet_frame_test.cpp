@@ -51,11 +51,22 @@ bool payloadLimitsAreSplitAndChecked() {
         && !netgpu::fitsPayloadLimits(netgpu::kMaxEthernetPayloadSize + 1, netgpu::kMaxEthernetPayloadSize + 1);
 }
 
+bool interfacePayloadLimitsAreDerived() {
+    constexpr size_t kStandardMtu = 1500;
+    constexpr size_t kJumboMtu = 9000;
+    constexpr size_t kOverProjectLimitMtu = kJumboMtu + 1;
+
+    return netgpu::deriveInterfacePayloadLimit(kStandardMtu) == kStandardMtu
+        && netgpu::deriveInterfacePayloadLimit(kJumboMtu) == kJumboMtu
+        && netgpu::deriveInterfacePayloadLimit(kOverProjectLimitMtu) == kJumboMtu;
+}
+
 int main() {
     if (!frameRoundTrips()) return 1;
     if (!oversizedPayloadIsRejected()) return 1;
     if (!wrongEtherTypeIsRejected()) return 1;
     if (!truncatedFrameIsRejected()) return 1;
     if (!payloadLimitsAreSplitAndChecked()) return 1;
+    if (!interfacePayloadLimitsAreDerived()) return 1;
     return 0;
 }

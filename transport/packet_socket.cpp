@@ -81,6 +81,19 @@ std::optional<MacAddress> readLocalMacAddress(SocketDescriptor& socket,
     return localAddress;
 }
 
+std::optional<size_t> readInterfaceMtu(SocketDescriptor& socket,
+    const std::string& interfaceName) {
+    ifreq interfaceRequest{};
+    std::strncpy(interfaceRequest.ifr_name, interfaceName.c_str(),
+        sizeof(interfaceRequest.ifr_name) - 1);
+    if (ioctl(socket.get(), SIOCGIFMTU, &interfaceRequest) < 0) {
+        return std::nullopt;
+    }
+
+    if (interfaceRequest.ifr_mtu <= 0) return std::nullopt;
+    return static_cast<size_t>(interfaceRequest.ifr_mtu);
+}
+
 PacketWaitResult waitForPacket(int socketFd, int timeoutMilliseconds) {
     pollfd socketPoll{};
     socketPoll.fd = socketFd;
@@ -171,9 +184,17 @@ bool PacketSocket::openOnInterface(const std::string& interfaceName) {
         return false;
     }
 
+    const auto mtu = readInterfaceMtu(*socket, interfaceName);
+    if (!mtu) {
+        setSystemError(lastError_, "ioctl(SIOCGIFMTU)");
+        return false;
+    }
+
     socketDescriptor_ = std::move(*socket);
     interfaceIndex_ = *interfaceIndex;
     localAddress_ = *localAddress;
+    mtu_ = *mtu;
+    maxPayloadLength_ = deriveInterfacePayloadLimit(mtu_);
     return true;
 }
 
@@ -183,6 +204,14 @@ const std::string& PacketSocket::lastError() const {
 
 const MacAddress& PacketSocket::localAddress() const {
     return localAddress_;
+}
+
+size_t PacketSocket::mtu() const {
+    return mtu_;
+}
+
+size_t PacketSocket::maxPayloadLength() const {
+    return maxPayloadLength_;
 }
 
 bool PacketSocket::sendFrame(const std::vector<uint8_t>& frame) {
